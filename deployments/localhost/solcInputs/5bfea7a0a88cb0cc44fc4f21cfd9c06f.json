@@ -1,0 +1,41 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/FundMe.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"./PriceConverter.sol\";\n\nerror FundMe_NotOwner();\n\n/** @title ejemplo de contrato para donaciones\n * @author Santa\n * @notice este contrato es una demo simple para aprendizaje\n * @dev este contrato implementa precios reales del mercado\n *\n */\ncontract FundMe {\n    using PriceConverter for uint256;\n\n    //uint256 public minimumUsd = 50 * 1e18;\n    uint256 public constant MINIMUM_USD = 50 * 10**18;\n\n    address[] public funders;\n    mapping(address => uint256) public addressToAmountFunded;\n\n    address public immutable i_owner;\n\n    AggregatorV3Interface public priceFeed;\n\n    constructor(address priceFeedAddress) {\n        i_owner = msg.sender;\n\n        priceFeed = AggregatorV3Interface(priceFeedAddress);\n    }\n\n    //payable es necesaria para las funciones que se destinaran a realizar transacciones\n    function fund() public payable {\n        require(\n            msg.value.getConversionRate(priceFeed) >= MINIMUM_USD,\n            \"You need to spend more ETH!\"\n        );\n\n        //cuando el require da negativo hace un revert, todo el codigo anterior a este dentro de la misma funcion se revertira, pero aun asi gastara gas, el gas usado para todo lo anteior al revert, no lo posterior ya que nunca llegara hasta alli\n        //require(msg.value.gerConversionRate() >= minimumUsd, \"no se envio el suficiente dinero\"); //1e18 == 1 * 10 ** 18 == 1000000000000000000 == 1 ethereum\n        //msg.value.gerConversionRate() en las librerias el objeto al cual se el esta aplicando el metodo es considerado su primer parametro\n        funders.push(msg.sender);\n        addressToAmountFunded[msg.sender] += msg.value;\n    }\n\n    function withdraw() public onlyOwner {\n        for (\n            uint256 founderIndex = 0;\n            founderIndex < funders.length;\n            founderIndex++\n        ) {\n            address funder = funders[founderIndex];\n            addressToAmountFunded[funder] = 0;\n        }\n\n        funders = new address[](0);\n\n        //tres tipode formas de hacer una trasnferencia\n        //transfer\n        //payable(msg.sender).transfer(address(this).balance);\n\n        //send\n        //bool sendSuccess = payable(msg.sender).send(address(this).balance);\n        //require(sendSuccess, \"error al hacer send\");\n\n        //call\n        (\n            bool callSuccess, /*bytes memory dataReturned*/\n\n        ) = payable(msg.sender).call{value: address(this).balance}(\"\");\n        require(callSuccess, \"error al hacer call\");\n    }\n\n    // ejemplo de modificador\n    modifier onlyOwner() {\n        //require(msg.sender == i_owner, \"sender is not owner\");\n        if (msg.sender != i_owner) {\n            revert FundMe_NotOwner();\n        }\n        _; // esto representa al resto del codigo en la funcion con el modificador en este caso hara la linea de arriba y cuando lo haga, hara todo lo demas\n    }\n\n    //si se hace un llamado a este contrato con algun tipo de informacion y este no es reconocido por el contrato, lo redirigira a found\n    fallback() external payable {\n        fund();\n    }\n\n    //si se hace un llamado a este contrato sin ningun tipo de informacion, lo redirigira a found\n    receive() external payable {\n        fund();\n    }\n}\n"
+    },
+    "contracts/PriceConverter.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.7;\n\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\n\n// Why is this a library and not abstract?\n// Why not an interface?\nlibrary PriceConverter {\n    // We could make this public, but then we'd have to deploy it\n    function getPrice(AggregatorV3Interface priceFeed)\n        internal\n        view\n        returns (uint256)\n    {\n        // Rinkeby ETH / USD Address\n        // https://docs.chain.link/docs/ethereum-addresses/\n        (, int256 answer, , , ) = priceFeed.latestRoundData();\n        // ETH/USD rate in 18 digit\n        return uint256(answer * 10000000000);\n    }\n\n    // 1000000000\n    function getConversionRate(\n        uint256 ethAmount,\n        AggregatorV3Interface priceFeed\n    ) internal view returns (uint256) {\n        uint256 ethPrice = getPrice(priceFeed);\n        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1000000000000000000;\n        // the actual ETH/USD conversion rate, after adjusting the extra 0s.\n        return ethAmountInUsd;\n    }\n}\n"
+    },
+    "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  // getRoundData and latestRoundData should both raise \"No data present\"\n  // if they do not have data to report, instead of returning unset values\n  // which could be misinterpreted as actual reported values.\n  function getRoundData(uint80 _roundId)\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n\n  function latestRoundData()\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
